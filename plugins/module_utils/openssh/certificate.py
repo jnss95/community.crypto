@@ -290,7 +290,8 @@ class OpensshCertificateInfo:
                  critical_options=None,
                  extensions=None,
                  reserved=None,
-                 signing_key=None):
+                 signing_key=None,
+                 security_key=None):
         self.nonce = nonce
         self.serial = serial
         self._cert_type = cert_type
@@ -302,6 +303,7 @@ class OpensshCertificateInfo:
         self.extensions = extensions
         self.reserved = reserved
         self.signing_key = signing_key
+        self.security_key = security_key
 
         self.type_string = None
 
@@ -473,6 +475,12 @@ class OpensshCertificate(object):
             cert = binascii.a2b_base64(b64_cert)
         except (binascii.Error, ValueError):
             raise ValueError("Certificate not in OpenSSH format")
+        
+        security_key = None
+        if format_identifier.startswith('sk-'):
+            format_identifier = format_identifier[3:]
+            security_key = True
+
 
         for key_type, string in _SSH_TYPE_STRINGS.items():
             if format_identifier == string + _CERT_SUFFIX_V01:
@@ -487,7 +495,7 @@ class OpensshCertificate(object):
             raise ValueError("Certificate formats do not match")
 
         try:
-            cert_info = cls._parse_cert_info(pub_key_type, parser)
+            cert_info = cls._parse_cert_info(pub_key_type, parser, security_key)
             signature = parser.string()
         except (TypeError, ValueError) as e:
             raise ValueError("Invalid certificate data: %s" % e)
@@ -562,8 +570,9 @@ class OpensshCertificate(object):
         return to_text(signature_data['signature_type'])
 
     @staticmethod
-    def _parse_cert_info(pub_key_type, parser):
+    def _parse_cert_info(pub_key_type, parser, security_key = None):
         cert_info = get_cert_info_object(pub_key_type)
+        cert_info.security_key = security_key
         cert_info.nonce = parser.string()
         cert_info.parse_public_numbers(parser)
         cert_info.serial = parser.uint64()
